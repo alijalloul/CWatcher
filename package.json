@@ -1,0 +1,32 @@
+{
+  "name": "c-watcher",
+  "displayName": "CWatcher",
+  "description": "Automatically updates C/C++ #include paths when files are renamed or moved, with confirmation dialog.",
+  "version": "1.0.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/index.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "CWatcher.enable",
+        "title": "Enable CWatcher"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0",
+    "vsce": "^2.15.0"
+  }
+}
