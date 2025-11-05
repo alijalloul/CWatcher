@@ -165,9 +165,9 @@ async function updateIncludesInFile(file, oldUri, newUri, oldUriTonewUriMap) {
     const newText = newLines.join("\n");
     const edit = new vscode.WorkspaceEdit();
     edit.replace(file, new vscode.Range(0, 0, Number.MAX_SAFE_INTEGER, 0), newText);
-    await Promise.all([
-        vscode.workspace.fs.writeFile(file, Buffer.from(newText, "utf8")),
-    ]);
+    const doc = await vscode.workspace.openTextDocument(file.fsPath);
+    await vscode.workspace.applyEdit(edit);
+    await doc.save();
     // console.log(`Updated includes in ${path.basename(file.fsPath)}`);
 }
 function deactivate() { }

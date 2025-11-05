@@ -183,9 +183,10 @@ async function updateIncludesInFile(
 		newText
 	);
 
-	await Promise.all([
-		vscode.workspace.fs.writeFile(file, Buffer.from(newText, "utf8")),
-	]);
+	const doc = await vscode.workspace.openTextDocument(file.fsPath);
+
+	await vscode.workspace.applyEdit(edit);
+	await doc.save();
 
 	// console.log(`Updated includes in ${path.basename(file.fsPath)}`);
 }
