@@ -41,75 +41,89 @@ async function tryHandleMove() {
 		return;
 	}
 
-	const allOldUriToNewUriMap: Record<string, [vscode.Uri, vscode.Uri][]> = {};
+	await vscode.window.withProgress(
+		{
+			location: vscode.ProgressLocation.Notification,
+			title: "Updating includes…",
+			cancellable: false,
+		},
+		async (progress) => {
+			const allOldUriToNewUriMap: Record<string, [vscode.Uri, vscode.Uri][]> =
+				{};
+			await Promise.all(
+				recentEvents.deleted.map(async (del) => {
+					const basenameMatchingCreated: vscode.Uri = recentEvents.created.find(
+						(created) =>
+							path.basename(created.fsPath) === path.basename(del.fsPath)
+					)!;
 
-	await Promise.all(
-		recentEvents.deleted.map(async (del) => {
-			const basenameMatchingCreated: vscode.Uri = recentEvents.created.find(
-				(created) => path.basename(created.fsPath) === path.basename(del.fsPath)
-			)!;
+					const oldFolder = del;
+					const newFolder = basenameMatchingCreated;
 
-			const oldFolder = del;
-			const newFolder = basenameMatchingCreated;
+					const stat = await vscode.workspace.fs.stat(newFolder);
+					if (stat.type === vscode.FileType.Directory) {
+						const newUris = await vscode.workspace.findFiles(
+							new vscode.RelativePattern(newFolder, "**/*.{c,cpp,h,hpp}")
+						);
 
-			const stat = await vscode.workspace.fs.stat(newFolder);
-			if (stat.type === vscode.FileType.Directory) {
-				const newUris = await vscode.workspace.findFiles(
-					new vscode.RelativePattern(newFolder, "**/*.{c,cpp,h,hpp}")
-				);
+						const oldUris = newUris.map((fileUri) => {
+							const relPath = path
+								.relative(newFolder.fsPath, fileUri.fsPath)
+								.replace(/\\/g, "/");
+							return vscode.Uri.joinPath(oldFolder, relPath);
+						});
 
-				const oldUris = newUris.map((fileUri) => {
-					const relPath = path
-						.relative(newFolder.fsPath, fileUri.fsPath)
-						.replace(/\\/g, "/");
-					return vscode.Uri.joinPath(oldFolder, relPath);
-				});
+						const partialallOldUriToNewUriMap: [vscode.Uri, vscode.Uri][] = [];
+						for (let i = 0; i < oldUris.length; i++) {
+							partialallOldUriToNewUriMap[i] = [oldUris[i], newUris[i]];
+						}
 
-				const partialallOldUriToNewUriMap: [vscode.Uri, vscode.Uri][] = [];
-				for (let i = 0; i < oldUris.length; i++) {
-					partialallOldUriToNewUriMap[i] = [oldUris[i], newUris[i]];
-				}
+						allOldUriToNewUriMap[del.fsPath] = partialallOldUriToNewUriMap;
+					}
+				})
+			);
 
-				allOldUriToNewUriMap[del.fsPath] = partialallOldUriToNewUriMap;
-			}
-		})
+			// console.log(
+			// 	"test allOldUriToNewUriMap: ",
+			// 	Object.values(allOldUriToNewUriMap).flat()
+			// );
+
+			await Promise.all(
+				recentEvents.deleted.map(async (del) => {
+					const basenameMatchingCreated: vscode.Uri = recentEvents.created.find(
+						(created) =>
+							path.basename(created.fsPath) === path.basename(del.fsPath)
+					)!;
+
+					const oldUri = del;
+					const newUri = basenameMatchingCreated;
+
+					// console.log("test oldUri: ", oldUri);
+					// console.log("test newUri: ", newUri);
+
+					try {
+						const stat = await vscode.workspace.fs.stat(newUri);
+						if (stat.type === vscode.FileType.Directory) {
+							await handleFolderMoveOrRename(
+								allOldUriToNewUriMap[del.fsPath],
+								Object.values(allOldUriToNewUriMap).flat()
+							);
+						} else {
+							await handleFileMoveOrRename(oldUri, newUri, [[oldUri, newUri]]);
+						}
+					} catch (err) {
+						console.error("Move handler error:", err);
+					}
+				})
+			);
+
+			recentEvents.deleted = [];
+			recentEvents.created = [];
+
+			progress.report({ message: "Done!" });
+			await new Promise((res) => setTimeout(res, 1000));
+		}
 	);
-
-	// console.log(
-	// 	"test allOldUriToNewUriMap: ",
-	// 	Object.values(allOldUriToNewUriMap).flat()
-	// );
-
-	await Promise.all(
-		recentEvents.deleted.map(async (del) => {
-			const basenameMatchingCreated: vscode.Uri = recentEvents.created.find(
-				(created) => path.basename(created.fsPath) === path.basename(del.fsPath)
-			)!;
-
-			const oldUri = del;
-			const newUri = basenameMatchingCreated;
-
-			// console.log("test oldUri: ", oldUri);
-			// console.log("test newUri: ", newUri);
-
-			try {
-				const stat = await vscode.workspace.fs.stat(newUri);
-				if (stat.type === vscode.FileType.Directory) {
-					await handleFolderMoveOrRename(
-						allOldUriToNewUriMap[del.fsPath],
-						Object.values(allOldUriToNewUriMap).flat()
-					);
-				} else {
-					await handleFileMoveOrRename(oldUri, newUri, [[oldUri, newUri]]);
-				}
-			} catch (err) {
-				console.error("Move handler error:", err);
-			}
-		})
-	);
-
-	recentEvents.deleted = [];
-	recentEvents.created = [];
 }
 
 async function handleFolderMoveOrRename(
