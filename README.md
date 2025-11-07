@@ -1,10 +1,10 @@
 # CWatcher
 
-Automatically updates your `#include` paths when C or C++ files are **moved** or **renamed** in your workspace.
+Automatically updates your `#include` paths when C or C++ files are **moved** or **renamed** **WITHIN** `src`.
 
 ### Features
 - Detects file renames/moves
-- Updates all `#include "..."` references
+- Updates all `#include "..."` references **IN** `src`
 - Asks for confirmation before editing
 
 ### Usage

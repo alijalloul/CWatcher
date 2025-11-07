@@ -39,7 +39,7 @@ const path = __importStar(require("path"));
 const vscode = __importStar(require("vscode"));
 const recentEvents = { deleted: [], created: [] };
 function activate(context) {
-    const watcher = vscode.workspace.createFileSystemWatcher("**/*");
+    const watcher = vscode.workspace.createFileSystemWatcher("**/src/**/*");
     watcher.onDidDelete((uri) => {
         recentEvents.deleted.push(uri);
         clearTimeout(recentEvents.timer);
@@ -58,10 +58,8 @@ function activate(context) {
     vscode.window.showInformationMessage("C++ Include Updater activated.");
 }
 async function tryHandleMove() {
+    // console.log("test recentEvents: ", recentEvents);
     if (recentEvents.created.length === 0) {
-        return;
-    }
-    if (recentEvents.created.length !== recentEvents.deleted.length) {
         return;
     }
     await vscode.window.withProgress({
@@ -69,10 +67,12 @@ async function tryHandleMove() {
         title: "Updating includes…",
         cancellable: false,
     }, async (progress) => {
-        progress.report({ message: "Updating includes…" });
         const allOldUriToNewUriMap = {};
         await Promise.all(recentEvents.deleted.map(async (del) => {
             const basenameMatchingCreated = recentEvents.created.find((created) => path.basename(created.fsPath) === path.basename(del.fsPath));
+            if (!basenameMatchingCreated) {
+                return;
+            }
             const oldFolder = del;
             const newFolder = basenameMatchingCreated;
             const stat = await vscode.workspace.fs.stat(newFolder);
@@ -91,12 +91,20 @@ async function tryHandleMove() {
                 allOldUriToNewUriMap[del.fsPath] = partialallOldUriToNewUriMap;
             }
         }));
+        if (Object.keys(allOldUriToNewUriMap).length === 0) {
+            recentEvents.deleted = [];
+            recentEvents.created = [];
+            return;
+        }
         // console.log(
         // 	"test allOldUriToNewUriMap: ",
         // 	Object.values(allOldUriToNewUriMap).flat()
         // );
         await Promise.all(recentEvents.deleted.map(async (del) => {
             const basenameMatchingCreated = recentEvents.created.find((created) => path.basename(created.fsPath) === path.basename(del.fsPath));
+            if (!basenameMatchingCreated) {
+                return;
+            }
             const oldUri = del;
             const newUri = basenameMatchingCreated;
             // console.log("test oldUri: ", oldUri);
@@ -117,7 +125,6 @@ async function tryHandleMove() {
         recentEvents.deleted = [];
         recentEvents.created = [];
         progress.report({ message: "Done!" });
-        await new Promise((res) => setTimeout(res, 300));
     });
 }
 async function handleFolderMoveOrRename(oldUriToNewUriMap, allOldUriToNewUriMap) {
@@ -127,7 +134,7 @@ async function handleFolderMoveOrRename(oldUriToNewUriMap, allOldUriToNewUriMap)
 async function handleFileMoveOrRename(oldUri, newUri, allOldUriToNewUriMap) {
     const files = await vscode.workspace.findFiles(`**/*.{c,cpp,h,hpp}`);
     const candidates = files.filter((el) => {
-        if (recentEvents.created.map((el2) => el2.fsPath).includes(el.fsPath)) {
+        if (allOldUriToNewUriMap.map((el) => el[1].fsPath).includes(el.fsPath)) {
             if (el.fsPath === newUri.fsPath) {
                 return true;
             }
@@ -200,9 +207,10 @@ async function updateIncludesInFile(file, oldUri, newUri, allOldUriToNewUriMap) 
     if (!changed)
         return;
     const newText = newLines.join("\n");
+    const doc = await vscode.workspace.openTextDocument(file);
     const edit = new vscode.WorkspaceEdit();
-    edit.replace(file, new vscode.Range(0, 0, Number.MAX_SAFE_INTEGER, 0), newText);
-    const doc = await vscode.workspace.openTextDocument(file.fsPath);
+    const lastLine = doc.lineCount - 1;
+    edit.replace(file, new vscode.Range(0, 0, lastLine, doc.lineAt(lastLine).text.length), newText);
     await vscode.workspace.applyEdit(edit);
     await doc.save();
     // console.log(`Updated includes in ${path.basename(file.fsPath)}`);
